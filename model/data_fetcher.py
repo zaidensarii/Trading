@@ -52,6 +52,24 @@ def _parse_timeperiod(timeperiod: Tuple[Optional[int], Optional[int]]) -> Tuple[
 	return start_time, end_time
 
 
+def _merge_min5_into_min10(candles: List[Dict[str, float]]) -> List[Dict[str, float]]:
+	"""Pair consecutive 5m bars into synthetic 10m OHLC (oldest-first lists)."""
+
+	merged: List[Dict[str, float]] = []
+	for i in range(0, len(candles) - 1, 2):
+		a, b = candles[i], candles[i + 1]
+		merged.append(
+			{
+				"timestamp": a["timestamp"],
+				"open": a["open"],
+				"high": max(a["high"], b["high"]),
+				"low": min(a["low"], b["low"]),
+				"close": b["close"],
+			}
+		)
+	return merged
+
+
 def _normalize_symbol(coin: str) -> str:
 	symbol = coin.strip().upper().replace("-", "_").replace("/", "_")
 
@@ -77,7 +95,8 @@ def fetch_mexc_futures_ohlc(
 			Use None for an open bound.
 			Examples: (1712700000, 1712786400), (1712700000, None), (None, 1712786400)
 		time_frame: Candle interval. Supported values:
-			Min1, Min5, Min15, Min30, Min60, Hour4, Hour8, Day1, Week1, Month1
+			Min1, Min5, Min10 (built from consecutive Min5 bars), Min15, Min30,
+			Min60, Hour4, Hour8, Day1, Week1, Month1
 		coin: List of coin symbols. Examples: ["BTC", "ETH"], ["BTC_USDT"]
 
 	Returns:
@@ -90,13 +109,18 @@ def fetch_mexc_futures_ohlc(
 	"""
 	start_time, end_time = _parse_timeperiod(timeperiod)
 
-	if time_frame not in VALID_INTERVALS:
+	_allowed = VALID_INTERVALS | {"Min10"}
+	if time_frame not in _allowed:
 		raise ValueError(
-			f"Invalid time_frame '{time_frame}'. Allowed values: {sorted(VALID_INTERVALS)}"
+			f"Invalid time_frame '{time_frame}'. Allowed values: {sorted(_allowed)}"
 		)
 
 	if not coin or not isinstance(coin, list):
 		raise ValueError("coin must be a non-empty list of symbols.")
+
+	if time_frame == "Min10":
+		core = fetch_mexc_futures_ohlc(timeperiod, "Min5", coin)
+		return {sym: _merge_min5_into_min10(bars) for sym, bars in core.items()}
 
 	results: Dict[str, List[Dict[str, float]]] = {}
 
