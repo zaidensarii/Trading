@@ -1,1 +1,9 @@
 certifi>=2024.0.0
+numpy>=1.24
+
+# Optional but strongly recommended for indicator precision/perf.
+# TA-Lib requires the C library to be installed first:
+#   macOS:  brew install ta-lib
+#   Debian: apt-get install -y libta-lib-dev   (or build from source)
+# The code falls back to a pure-numpy implementation if TA-Lib is missing.
+# TA-Lib==0.4.32
