@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MEXC Divergence Scanner</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e1e4ea;
+    --muted: #8b8fa3;
+    --accent: #6c5ce7;
+    --accent-hover: #7c6ef7;
+    --green: #00b894;
+    --red: #e74c3c;
+    --green-bg: rgba(0,184,148,.12);
+    --red-bg: rgba(231,76,60,.12);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  .header {
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .header h1 { font-size: 20px; font-weight: 600; }
+  .header .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px 32px; }
+
+  /* ── Controls ─────────────────────────────── */
+  .controls {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    align-items: end;
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label {
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--muted);
+  }
+  .field input, .field select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .field input:focus, .field select:focus {
+    border-color: var(--accent);
+  }
+  .field select { cursor: pointer; }
+
+  .checkbox-group { display: flex; gap: 16px; align-items: center; padding-top: 6px; }
+  .checkbox-group label {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 14px; cursor: pointer; color: var(--text);
+    text-transform: none; letter-spacing: 0;
+  }
+  .checkbox-group input[type="checkbox"] {
+    width: 16px; height: 16px; accent-color: var(--accent);
+  }
+
+  .btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .2s;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--accent-hover); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* ── Status ───────────────────────────────── */
+  .status {
+    margin-top: 16px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    display: none;
+  }
+  .status.info    { display: block; background: rgba(108,92,231,.12); color: #a29bfe; }
+  .status.error   { display: block; background: var(--red-bg); color: var(--red); }
+  .status.success { display: block; background: var(--green-bg); color: var(--green); }
+
+  /* ── Results ──────────────────────────────── */
+  .results { margin-top: 24px; }
+  .results h2 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .badge {
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-weight: 500;
+  }
+  .badge.bullish { background: var(--green-bg); color: var(--green); }
+  .badge.bearish { background: var(--red-bg); color: var(--red); }
+
+  /* ── Signal cards ──────────────────────────── */
+  .signal-list { display: flex; flex-direction: column; gap: 12px; }
+  .signal-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 16px;
+    align-items: center;
+  }
+  .signal-card .type-indicator {
+    width: 4px;
+    height: 100%;
+    min-height: 40px;
+    border-radius: 2px;
+  }
+  .signal-card .type-indicator.bullish { background: var(--green); }
+  .signal-card .type-indicator.bearish { background: var(--red); }
+
+  .signal-details { display: flex; flex-direction: column; gap: 4px; }
+  .signal-details .title { font-weight: 600; font-size: 15px; }
+  .signal-details .meta { font-size: 13px; color: var(--muted); }
+
+  .signal-metrics {
+    display: flex; gap: 20px; align-items: center;
+    font-size: 13px; color: var(--muted);
+  }
+  .metric { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .metric .value { font-size: 15px; font-weight: 600; color: var(--text); }
+  .metric .label { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+
+  /* ── Candle table ─────────────────────────── */
+  .candle-section { margin-top: 24px; }
+  .candle-section h2 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
+  .table-wrap {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: auto;
+    max-height: 420px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    position: sticky; top: 0;
+    background: var(--card);
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 500;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  tbody td {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    font-variant-numeric: tabular-nums;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,.03); }
+  .price-up { color: var(--green); }
+  .price-down { color: var(--red); }
+
+  .no-results {
+    text-align: center;
+    padding: 40px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  @media (max-width: 640px) {
+    .container { padding: 16px; }
+    .controls { grid-template-columns: 1fr 1fr; }
+    .signal-card { grid-template-columns: auto 1fr; }
+    .signal-metrics { flex-wrap: wrap; gap: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="dot"></div>
+  <h1>MEXC Divergence Scanner</h1>
+</div>
+
+<div class="container">
+  <!-- Controls -->
+  <div class="controls">
+    <div class="field">
+      <label>Symbol</label>
+      <select id="symbol">
+        <option value="TAO_USDT" selected>Loading…</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Timeframe</label>
+      <select id="timeframe">
+        {% for tf in timeframes %}
+        <option value="{{ tf }}" {% if tf == 'Min10' %}selected{% endif %}>{{ tf }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Start Date &amp; Time (PKT)</label>
+      <input type="datetime-local" id="startDate">
+    </div>
+
+    <div class="field">
+      <label>End Date &amp; Time (PKT)</label>
+      <input type="datetime-local" id="endDate">
+    </div>
+
+    <div class="field">
+      <label>Candles</label>
+      <input type="number" id="numCandles" value="100" min="20" max="500">
+    </div>
+
+    <div class="field">
+      <label>Indicators</label>
+      <div class="checkbox-group">
+        <label><input type="checkbox" id="indRSI" checked> RSI</label>
+        <label><input type="checkbox" id="indMACD"> MACD</label>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Options</label>
+      <div class="checkbox-group">
+        <label><input type="checkbox" id="hidden"> Hidden Div.</label>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>&nbsp;</label>
+      <button class="btn" id="scanBtn" onclick="runScan()">Scan</button>
+    </div>
+  </div>
+
+  <!-- Status -->
+  <div class="status" id="status"></div>
+
+  <!-- Signals -->
+  <div class="results" id="results" style="display:none">
+    <h2>
+      Divergence Signals
+      <span class="badge" id="signalCount"></span>
+    </h2>
+    <div class="signal-list" id="signalList"></div>
+  </div>
+
+  <!-- Candle Table -->
+  <div class="candle-section" id="candleSection" style="display:none">
+    <h2>Candle Data <span style="font-weight:400;font-size:13px;color:var(--muted)" id="candleMeta"></span></h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Date / Time (PKT)</th>
+            <th>Open</th>
+            <th>High</th>
+            <th>Low</th>
+            <th>Close</th>
+            <th>Change</th>
+          </tr>
+        </thead>
+        <tbody id="candleBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status ' + type;
+}
+
+function clearStatus() {
+  const el = document.getElementById('status');
+  el.className = 'status';
+  el.textContent = '';
+}
+
+function formatPrice(p) {
+  if (p == null) return '—';
+  const n = Number(p);
+  if (n >= 1000) return n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  if (n >= 1)    return n.toLocaleString('en-US', {minimumFractionDigits: 4, maximumFractionDigits: 4});
+  return n.toLocaleString('en-US', {minimumFractionDigits: 6, maximumFractionDigits: 6});
+}
+
+async function runScan() {
+  const btn = document.getElementById('scanBtn');
+  btn.disabled = true;
+  btn.textContent = 'Scanning…';
+  clearStatus();
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('candleSection').style.display = 'none';
+
+  const indicators = [];
+  if (document.getElementById('indRSI').checked) indicators.push('RSI');
+  if (document.getElementById('indMACD').checked) indicators.push('MACD');
+  if (indicators.length === 0) {
+    setStatus('Select at least one indicator.', 'error');
+    btn.disabled = false;
+    btn.textContent = 'Scan';
+    return;
+  }
+
+  const payload = {
+    symbol: document.getElementById('symbol').value,
+    timeframe: document.getElementById('timeframe').value,
+    startDate: document.getElementById('startDate').value || null,
+    endDate: document.getElementById('endDate').value || null,
+    numCandles: parseInt(document.getElementById('numCandles').value, 10),
+    indicators: indicators,
+    hidden: document.getElementById('hidden').checked,
+  };
+
+  setStatus('Fetching candles and running divergence scan…', 'info');
+
+  try {
+    const resp = await fetch('/api/scan', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      setStatus(data.error || 'Unknown error', 'error');
+      return;
+    }
+
+    // ── Signals ──
+    const signals = data.signals || [];
+    const resultDiv = document.getElementById('results');
+    const signalList = document.getElementById('signalList');
+    const countBadge = document.getElementById('signalCount');
+
+    signalList.innerHTML = '';
+
+    if (signals.length === 0) {
+      signalList.innerHTML = '<div class="no-results">No divergences detected in the selected range.</div>';
+      countBadge.textContent = '0';
+      countBadge.className = 'badge';
+    } else {
+      const bullCount = signals.filter(s => s.divergence_type.includes('Bullish')).length;
+      const bearCount = signals.length - bullCount;
+      countBadge.textContent = signals.length + ' found';
+      countBadge.className = 'badge ' + (bullCount >= bearCount ? 'bullish' : 'bearish');
+
+      signals.forEach(s => {
+        const isBull = s.divergence_type.includes('Bullish');
+        const cls = isBull ? 'bullish' : 'bearish';
+        const card = document.createElement('div');
+        card.className = 'signal-card';
+        card.innerHTML = `
+          <div class="type-indicator ${cls}"></div>
+          <div class="signal-details">
+            <div class="title">${s.divergence_type} <span style="font-weight:400;color:var(--muted)">· ${s.indicator_name}</span></div>
+            <div class="meta">
+              Pivot 1: ${s.pivot1_timestamp_fmt || '—'} @ ${formatPrice(s.pivot1_price)}
+              &nbsp;→&nbsp;
+              Pivot 2: ${s.pivot2_timestamp_fmt || '—'} @ ${formatPrice(s.pivot2_price)}
+            </div>
+            <div class="meta">Confirmed: ${s.confirmation_timestamp_fmt || '—'}</div>
+          </div>
+          <div class="signal-metrics">
+            <div class="metric">
+              <span class="value ${cls}">${s.price_delta_pct != null ? s.price_delta_pct.toFixed(2) + '%' : '—'}</span>
+              <span class="label">Price Δ</span>
+            </div>
+            <div class="metric">
+              <span class="value">${s.indicator_delta != null ? s.indicator_delta.toFixed(2) : '—'}</span>
+              <span class="label">Ind. Δ</span>
+            </div>
+            <div class="metric">
+              <span class="value">${(s.confidence * 100).toFixed(0)}%</span>
+              <span class="label">Confidence</span>
+            </div>
+          </div>`;
+        signalList.appendChild(card);
+      });
+    }
+    resultDiv.style.display = 'block';
+
+    // ── Candle table ──
+    const candles = data.candles || [];
+    const candleBody = document.getElementById('candleBody');
+    const candleMeta = document.getElementById('candleMeta');
+    candleBody.innerHTML = '';
+    candleMeta.textContent = `— ${data.symbol} · ${data.timeframe} · ${candles.length} candles`;
+
+    candles.forEach((c, i) => {
+      const chg = ((c.close - c.open) / c.open * 100);
+      const cls = chg >= 0 ? 'price-up' : 'price-down';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${i + 1}</td>
+        <td>${c.datetime}</td>
+        <td>${formatPrice(c.open)}</td>
+        <td>${formatPrice(c.high)}</td>
+        <td>${formatPrice(c.low)}</td>
+        <td class="${cls}">${formatPrice(c.close)}</td>
+        <td class="${cls}">${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%</td>`;
+      candleBody.appendChild(tr);
+    });
+    document.getElementById('candleSection').style.display = 'block';
+
+    setStatus(`Done — ${candles.length} candles loaded, ${signals.length} divergence(s) found.`, 'success');
+
+  } catch (err) {
+    setStatus('Network error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Scan';
+  }
+}
+
+// Set default dates: end = now in PKT, start = 2 hours ago.
+(function initDates() {
+  // PKT = UTC+5
+  const PKT_OFFSET = 5 * 60; // minutes
+  const now = new Date();
+  const pktNow = new Date(now.getTime() + (PKT_OFFSET + now.getTimezoneOffset()) * 60000);
+  const pkt2hAgo = new Date(pktNow.getTime() - 2 * 60 * 60 * 1000);
+  document.getElementById('endDate').value = pktNow.toISOString().slice(0, 16);
+  document.getElementById('startDate').value = pkt2hAgo.toISOString().slice(0, 16);
+})();
+
+// Load symbols dropdown from MEXC API.
+(async function loadSymbols() {
+  const sel = document.getElementById('symbol');
+  try {
+    const resp = await fetch('/api/symbols');
+    const syms = await resp.json();
+    if (syms.length) {
+      sel.innerHTML = '';
+      syms.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = s.replace('_', ' / ');
+        if (s === 'TAO_USDT') opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+  } catch(e) {
+    console.warn('Could not load symbols:', e);
+  }
+})();
+</script>
+</body>
+</html>

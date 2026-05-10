@@ -1,5 +1,6 @@
 certifi>=2024.0.0
 numpy>=1.24
+flask>=3.0
 
 # Optional but strongly recommended for indicator precision/perf.
 # TA-Lib requires the C library to be installed first:

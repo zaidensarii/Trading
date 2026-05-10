@@ -109,7 +109,7 @@ class StreamingConfig:
 class AppConfig:
 	"""Top-level application config."""
 
-	symbols: List[str] = field(default_factory=lambda: ["BTC_USDT"])
+	symbols: List[str] = field(default_factory=lambda: ["TAO_USDT"])
 	time_frame: str = "Min10"
 	num_candles: int = 100
 	indicators: Tuple[str, ...] = ("RSI",)  # ("RSI",) or ("RSI", "MACD")

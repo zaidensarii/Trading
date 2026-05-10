@@ -136,26 +136,35 @@ class DivergenceDetector:
 			return []
 
 		results: List[DivergenceSignal] = []
-		# Compare the most recent pivot against the previous N — capturing
-		# divergences that span more than just the immediately prior swing.
-		recent = filtered[-cfg.pivot_scan_depth:]
-		newest = recent[-1]
-		candidates = recent[:-1]
+		# Scan deeper: compare each of the last `pivot_scan_depth` pivots
+		# against every earlier pivot within max_pivot_distance. This catches
+		# multi-swing divergences that the old nearest-only comparison missed.
+		scan_count = min(cfg.pivot_scan_depth, len(filtered))
+		for i in range(len(filtered) - scan_count, len(filtered)):
+			newer = filtered[i]
+			for j in range(i - 1, max(i - scan_count - 1, -1), -1):
+				older = filtered[j]
+				result = self._classify_pair(
+					p1=older,
+					p2=newer,
+					indicator_series=indicator_series,
+					timestamps=timestamps,
+					kind=kind,
+					symbol=symbol,
+					timeframe=timeframe,
+				)
+				if result is not None:
+					results.append(result)
 
-		for older in candidates:
-			result = self._classify_pair(
-				p1=older,
-				p2=newest,
-				indicator_series=indicator_series,
-				timestamps=timestamps,
-				kind=kind,
-				symbol=symbol,
-				timeframe=timeframe,
-			)
-			if result is not None:
-				results.append(result)
+		# Deduplicate: if the same newer pivot appears in multiple signals of
+		# the same type, keep only the highest-confidence one.
+		best: Dict[str, DivergenceSignal] = {}
+		for sig in results:
+			key = f"{sig.pivot2_index}|{sig.divergence_type.value}"
+			if key not in best or sig.confidence > best[key].confidence:
+				best[key] = sig
 
-		return results
+		return list(best.values())
 
 	def _classify_pair(
 		self,
@@ -219,6 +228,25 @@ class DivergenceDetector:
 				if not (ind1 >= cfg.rsi_overbought or ind2 >= cfg.rsi_overbought):
 					return None
 
+		# ── Midline crossing filter ──
+		# If the indicator crosses its neutral midline between the two pivots,
+		# the divergence is invalidated — the underlying momentum reset.
+		# RSI midline = 50, MACD midline = 0.
+		midline = self._get_midline()
+		if midline is not None:
+			slice_between = indicator_series[p1.index + 1 : p2.index]
+			if len(slice_between) > 0:
+				if divergence_type.is_bullish:
+					# Both pivots are lows (below midline); if the indicator
+					# crossed *above* the midline between them, invalidate.
+					if np.any(slice_between > midline):
+						return None
+				else:
+					# Both pivots are highs (above midline); if the indicator
+					# crossed *below* the midline between them, invalidate.
+					if np.any(slice_between < midline):
+						return None
+
 		# Confirmation bar = pivot2 + right (when the pivot became valid).
 		confirmation_index = min(p2.index + cfg.pivot_right, len(timestamps) - 1)
 
@@ -250,6 +278,15 @@ class DivergenceDetector:
 			confidence=confidence,
 		)
 
+	def _get_midline(self) -> float | None:
+		"""Return the indicator's neutral midline for crossing checks."""
+		name = self.indicator.name.upper()
+		if name.startswith("RSI"):
+			return 50.0
+		if name.startswith("MACD"):
+			return 0.0
+		return None
+
 	def _score_confidence(
 		self,
 		price_delta_pct: float,
@@ -274,4 +311,22 @@ class DivergenceDetector:
 				depth = max(max(ind1, ind2) - cfg.rsi_overbought, 0.0)
 				exhaustion_score = min(depth / max(100.0 - cfg.rsi_overbought, 1e-9), 1.0)
 
-		return round(0.4 * price_score + 0.4 * ind_score + 0.2 * exhaustion_score, 4)
+		# Divergence clarity: how clearly opposite are the price and indicator
+		# moves? Higher ratio = clearer divergence.
+		if abs(price_delta_pct) > 1e-9 and abs(indicator_delta) > 1e-9:
+			# Both legs should be significant relative to their noise floors.
+			clarity = min(
+				(abs(price_delta_pct) / cfg.min_price_diff_pct) *
+				(abs(indicator_delta) / cfg.min_indicator_diff) / 25.0,
+				1.0,
+			)
+		else:
+			clarity = 0.0
+
+		return round(
+			0.30 * price_score +
+			0.30 * ind_score +
+			0.20 * exhaustion_score +
+			0.20 * clarity,
+			4,
+		)
