@@ -7,18 +7,12 @@ from typing import Any, Dict
 
 
 class DivergenceType(str, Enum):
-	REGULAR_BULLISH = "Regular Bullish"
-	REGULAR_BEARISH = "Regular Bearish"
-	HIDDEN_BULLISH = "Hidden Bullish"
-	HIDDEN_BEARISH = "Hidden Bearish"
+	BULLISH = "Bullish"
+	BEARISH = "Bearish"
 
 	@property
 	def is_bullish(self) -> bool:
-		return self in (DivergenceType.REGULAR_BULLISH, DivergenceType.HIDDEN_BULLISH)
-
-	@property
-	def is_regular(self) -> bool:
-		return self in (DivergenceType.REGULAR_BULLISH, DivergenceType.REGULAR_BEARISH)
+		return self is DivergenceType.BULLISH
 
 
 @dataclass(frozen=True)

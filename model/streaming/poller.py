@@ -26,7 +26,6 @@ from typing import Callable, Dict, List, Sequence
 from ..config import StreamingConfig, interval_to_seconds
 from ..divergence.detector import DivergenceDetector
 from ..divergence.types import DivergenceSignal
-from ..alerts.base import AlertChannel
 
 log = logging.getLogger(__name__)
 
@@ -45,17 +44,13 @@ class CandlePoller:
 		config: StreamingConfig,
 		fetch_callable: CandleFetcher,
 		detectors: Sequence[DivergenceDetector],
-		channels: Sequence[AlertChannel],
 		signal_cache_size: int = 2048,
 	) -> None:
 		if not detectors:
 			raise ValueError("At least one detector is required.")
-		if not channels:
-			raise ValueError("At least one alert channel is required.")
 		self.config = config
 		self.fetch_callable = fetch_callable
 		self.detectors = list(detectors)
-		self.channels = list(channels)
 		self._seen_signals: dict[str, int] = {}  # signal_id -> first-seen wall time
 		self._seen_cache_size = signal_cache_size
 		self._stop = False
@@ -145,7 +140,7 @@ class CandlePoller:
 				)
 			else:
 				log.info(
-					"OK | %s | %s | analyzed %d closed bars | %s | %d new divergence signal(s) (alerts printed separately)",
+					"OK | %s | %s | analyzed %d closed bars | %s | %d new divergence signal(s)",
 					cfg.symbol,
 					cfg.time_frame,
 					len(closed),
@@ -210,17 +205,20 @@ class CandlePoller:
 			return False
 		self._remember(key)
 		log.debug(
-			"New divergence (also printed to alert channels): %s %s %s conf=%.2f",
+			"New divergence: %s %s %s conf=%.2f",
 			signal.symbol,
 			signal.divergence_type.value,
 			signal.indicator_name,
 			signal.confidence,
 		)
-		for ch in self.channels:
-			try:
-				ch.send(signal)
-			except Exception:
-				log.exception("Alert channel %s failed", type(ch).__name__)
+		log.info(
+			"SIGNAL | %s | %s | %s | %s | confidence %.0f%%",
+			signal.symbol,
+			signal.timeframe,
+			signal.divergence_type.value,
+			signal.indicator_name,
+			signal.confidence * 100.0,
+		)
 		return True
 
 	def _remember(self, key: str) -> None:

@@ -2,9 +2,9 @@
 
 Builds two synthetic series:
   1. A regular **bearish** scenario: price makes a higher high, RSI makes a
-     lower high. We expect a REGULAR_BEARISH signal.
+	     lower high. We expect a BEARISH signal.
   2. A regular **bullish** scenario: price makes a lower low, RSI makes a
-     higher low. We expect a REGULAR_BULLISH signal.
+	     higher low. We expect a BULLISH signal.
 
 Run:
 	python -m tests.test_divergence_smoke
@@ -18,7 +18,6 @@ from typing import List
 
 import numpy as np
 
-from model.alerts import TerminalAlertChannel
 from model.config import DivergenceConfig
 from model.divergence import DivergenceDetector
 from model.divergence.types import DivergenceType
@@ -43,7 +42,7 @@ def _candles_from_closes(closes: List[float], start_ts: int = 1_700_000_000, ste
 
 
 def _bearish_series() -> List[float]:
-	"""Hand-crafted shape with a textbook regular bearish divergence:
+	"""Hand-crafted shape with a textbook bearish divergence:
 
 	  phase 1  — sharp rally to peak A  (strong momentum → high RSI)
 	  phase 2  — pullback to B
@@ -69,7 +68,7 @@ def _bearish_series() -> List[float]:
 
 
 def _bullish_series() -> List[float]:
-	"""Hand-crafted shape with a textbook regular bullish divergence:
+	"""Hand-crafted shape with a textbook bullish divergence:
 
 	  phase 1 — sharp drop to trough A (strong momentum → low RSI)
 	  phase 2 — bounce to B
@@ -93,24 +92,27 @@ def _bullish_series() -> List[float]:
 
 def _run(scenario: str, candles, expected: DivergenceType) -> bool:
 	cfg = DivergenceConfig(
-		# Loosen confirmations slightly for synthetic data — real markets
-		# routinely hit 70/30 RSI; these sine-based prices may not.
-		rsi_overbought=55.0,
-		rsi_oversold=45.0,
+		# Disable RSI zone gating in synthetic tests so we only validate
+		# bullish/bearish divergence classification behavior.
+		rsi_overbought=None,
+		rsi_oversold=None,
 		min_indicator_diff=0.5,
 		min_price_diff_pct=0.05,
 		pivot_left=3,
 		pivot_right=3,
 		min_pivot_distance=20,
 		max_pivot_distance=200,
+		pivot_scan_depth=8,
 	)
 	detector = DivergenceDetector(RSIIndicator(period=14), cfg)
 	signals = detector.detect(candles, symbol="TEST_USDT", timeframe="Min15")
 	matched = [s for s in signals if s.divergence_type is expected]
-	channel = TerminalAlertChannel(use_color=True)
 	print(f"\n[{scenario}] total signals={len(signals)} expected={expected.value} matched={len(matched)}")
 	for s in signals:
-		channel.send(s)
+		print(
+			f"SIGNAL | {s.symbol} | {s.timeframe} | {s.divergence_type.value} | "
+			f"{s.indicator_name} | confidence {s.confidence * 100.0:.0f}%"
+		)
 	return len(matched) >= 1
 
 
@@ -118,12 +120,12 @@ def main() -> int:
 	bearish_ok = _run(
 		"BEARISH",
 		_candles_from_closes(_bearish_series()),
-		DivergenceType.REGULAR_BEARISH,
+		DivergenceType.BEARISH,
 	)
 	bullish_ok = _run(
 		"BULLISH",
 		_candles_from_closes(_bullish_series()),
-		DivergenceType.REGULAR_BULLISH,
+		DivergenceType.BULLISH,
 	)
 	print(
 		f"\nResult: bearish={'PASS' if bearish_ok else 'FAIL'}  "

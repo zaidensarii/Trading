@@ -11,7 +11,7 @@ except Exception:  # pragma: no cover
 	certifi = None
 
 
-MEXC_FUTURES_BASE_URL = "https://api.mexc.com"
+MEXC_FUTURES_BASE_URL = "https://contract.mexc.com"
 MEXC_FUTURES_KLINE_PATH = "/api/v1/contract/kline/{symbol}"
 VALID_INTERVALS = {
 	"Min1",

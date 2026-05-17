@@ -24,7 +24,7 @@ except Exception:
 from model.config import DivergenceConfig, INTERVAL_SECONDS, interval_to_seconds
 from model.data_fetcher import fetch_mexc_futures_ohlc
 from model.divergence import DivergenceDetector
-from model.indicators import MACDIndicator, RSIIndicator
+from model.indicators import RSIIndicator
 
 app = Flask(__name__)
 logging.basicConfig(
@@ -71,17 +71,6 @@ def _build_detectors(indicator_names: list[str], div_cfg: DivergenceConfig):
             detectors.append(
                 DivergenceDetector(RSIIndicator(period=div_cfg.rsi_period), div_cfg)
             )
-        elif key == "MACD":
-            detectors.append(
-                DivergenceDetector(
-                    MACDIndicator(
-                        fast=div_cfg.macd_fast,
-                        slow=div_cfg.macd_slow,
-                        signal=div_cfg.macd_signal,
-                    ),
-                    div_cfg,
-                )
-            )
     return detectors
 
 
@@ -108,7 +97,6 @@ def scan():
     symbol = (body.get("symbol") or "TAO_USDT").strip().upper()
     time_frame = body.get("timeframe", "Min10")
     indicators = body.get("indicators", ["RSI"])
-    enable_hidden = bool(body.get("hidden", False))
     num_candles = int(body.get("numCandles", 100))
 
     # Clamp num_candles to a safe range.
@@ -158,7 +146,7 @@ def scan():
     candles = candles[-num_candles:]
 
     # Run divergence detectors.
-    div_cfg = DivergenceConfig(enable_hidden=enable_hidden)
+    div_cfg = DivergenceConfig()
     detectors = _build_detectors(indicators, div_cfg)
 
     signals = []

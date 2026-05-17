@@ -11,12 +11,10 @@ Indicator values are read at the same bar as the price pivot — this is the
 standard convention and is what TradingView's built-in divergence script does.
 
 Pivot HIGHS:
-	regular bearish:  price(p2) > price(p1)  AND  ind(p2) < ind(p1)
-	hidden  bearish:  price(p2) < price(p1)  AND  ind(p2) > ind(p1)
+	bearish:  price(p2) > price(p1)  AND  ind(p2) < ind(p1)
 
 Pivot LOWS:
-	regular bullish:  price(p2) < price(p1)  AND  ind(p2) > ind(p1)
-	hidden  bullish:  price(p2) > price(p1)  AND  ind(p2) < ind(p1)
+	bullish:  price(p2) < price(p1)  AND  ind(p2) > ind(p1)
 
 Filters (configurable):
 	- min_pivot_distance / max_pivot_distance bars between p1 and p2
@@ -43,7 +41,7 @@ log = logging.getLogger(__name__)
 
 
 class DivergenceDetector:
-	"""Detects bullish/bearish, regular/hidden divergences between price and an indicator."""
+	"""Detects bullish and bearish divergences between price and an indicator."""
 
 	def __init__(
 		self,
@@ -203,15 +201,11 @@ class DivergenceDetector:
 		divergence_type: DivergenceType | None = None
 
 		if kind == "high":
-			if cfg.enable_regular and price2 > price1 and ind2 < ind1:
-				divergence_type = DivergenceType.REGULAR_BEARISH
-			elif cfg.enable_hidden and price2 < price1 and ind2 > ind1:
-				divergence_type = DivergenceType.HIDDEN_BEARISH
+			if price2 > price1 and ind2 < ind1:
+				divergence_type = DivergenceType.BEARISH
 		else:  # "low"
-			if cfg.enable_regular and price2 < price1 and ind2 > ind1:
-				divergence_type = DivergenceType.REGULAR_BULLISH
-			elif cfg.enable_hidden and price2 > price1 and ind2 < ind1:
-				divergence_type = DivergenceType.HIDDEN_BULLISH
+			if price2 < price1 and ind2 > ind1:
+				divergence_type = DivergenceType.BULLISH
 
 		if divergence_type is None:
 			return None

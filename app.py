@@ -1,9 +1,9 @@
 """Trading bot entrypoint — real-time divergence scanner.
 
 Usage:
-	python app.py                         # defaults: BTC_USDT, Min10, RSI, 100 candles
+	python app.py                         # defaults: TAO_USDT, Min10, RSI, 100 candles
 	python app.py --symbol ETH_USDT --time-frame Min5
-	python app.py --symbols BTC_USDT,ETH_USDT --indicators RSI,MACD --hidden
+	python app.py --symbols TAO_USDT,ETH_USDT --indicators RSI
 	python app.py --once                  # run a single scan and exit
 """
 from __future__ import annotations
@@ -15,11 +15,11 @@ import threading
 import time
 from typing import List
 
-from model.alerts import TerminalAlertChannel
 from model.config import AppConfig, DivergenceConfig, StreamingConfig
 from model.data_fetcher import fetch_mexc_futures_ohlc
 from model.divergence import DivergenceDetector
-from model.indicators import MACDIndicator, RSIIndicator
+from model.divergence.types import DivergenceSignal
+from model.indicators import RSIIndicator
 from model.streaming import CandlePoller
 
 
@@ -36,9 +36,8 @@ def _parse_args() -> argparse.Namespace:
 	p.add_argument(
 		"--indicators",
 		default="RSI",
-		help="Comma-separated indicators (RSI, MACD).",
+		help="Comma-separated indicators (RSI).",
 	)
-	p.add_argument("--hidden", action="store_true", help="Also detect hidden divergences.")
 	p.add_argument("--once", action="store_true", help="Single scan, no loop.")
 	p.add_argument("--log-level", default="INFO")
 	return p.parse_args()
@@ -49,7 +48,7 @@ def _resolve_symbols(args: argparse.Namespace) -> List[str]:
 		return [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
 	if args.symbol:
 		return [args.symbol.strip().upper()]
-	return ["BTC_USDT"]
+	return ["TAO_USDT"]
 
 
 def _build_detectors(
@@ -62,19 +61,8 @@ def _build_detectors(
 			detectors.append(
 				DivergenceDetector(RSIIndicator(period=div_cfg.rsi_period), div_cfg)
 			)
-		elif key == "MACD":
-			detectors.append(
-				DivergenceDetector(
-					MACDIndicator(
-						fast=div_cfg.macd_fast,
-						slow=div_cfg.macd_slow,
-						signal=div_cfg.macd_signal,
-					),
-					div_cfg,
-				)
-			)
 		else:
-			raise ValueError(f"Unsupported indicator '{name}'. Use RSI or MACD.")
+			raise ValueError(f"Unsupported indicator '{name}'. Use RSI.")
 	return detectors
 
 
@@ -112,7 +100,6 @@ def _run_once(
 	time_frame: str,
 	num_candles: int,
 	detectors,
-	channels,
 ) -> None:
 	fetch = _make_fetcher()
 	candles = fetch(symbol, time_frame, num_candles)
@@ -122,11 +109,21 @@ def _run_once(
 		if not signals:
 			logging.info("No %s divergences for %s %s", det.indicator.name, symbol, time_frame)
 		for sig in signals:
-			for ch in channels:
-				ch.send(sig)
+			_log_signal(sig)
 
 
-def _run_streaming(app_cfg: AppConfig, detectors_per_symbol, channels) -> None:
+def _log_signal(sig: DivergenceSignal) -> None:
+	logging.info(
+		"SIGNAL | %s | %s | %s | %s | confidence %.0f%%",
+		sig.symbol,
+		sig.timeframe,
+		sig.divergence_type.value,
+		sig.indicator_name,
+		sig.confidence * 100.0,
+	)
+
+
+def _run_streaming(app_cfg: AppConfig, detectors_per_symbol) -> None:
 	"""One poller per symbol, each in its own thread."""
 	threads: List[threading.Thread] = []
 	pollers: List[CandlePoller] = []
@@ -141,7 +138,6 @@ def _run_streaming(app_cfg: AppConfig, detectors_per_symbol, channels) -> None:
 			config=stream_cfg,
 			fetch_callable=_make_fetcher(),
 			detectors=detectors_per_symbol,
-			channels=channels,
 		)
 		pollers.append(poller)
 		t = threading.Thread(target=poller.run, name=f"poller-{symbol}", daemon=True)
@@ -188,7 +184,7 @@ def main() -> int:
 		format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 	)
 
-	div_cfg = DivergenceConfig(enable_hidden=args.hidden)
+	div_cfg = DivergenceConfig()
 	indicators = [s for s in args.indicators.split(",") if s.strip()]
 	app_cfg = AppConfig(
 		symbols=_resolve_symbols(args),
@@ -200,33 +196,30 @@ def main() -> int:
 	)
 
 	detectors = _build_detectors(indicators, div_cfg)
-	channels = [TerminalAlertChannel()]
 
 	if args.once:
 		logging.info(
-			"Scan: symbols=%s tf=%s candles=%d indicators=%s hidden=%s",
+			"Scan: symbols=%s tf=%s candles=%d indicators=%s",
 			app_cfg.symbols,
 			app_cfg.time_frame,
 			app_cfg.num_candles,
 			app_cfg.indicators,
-			args.hidden,
 		)
 	else:
 		logging.debug(
-			"Config: symbols=%s tf=%s candles=%d indicators=%s hidden=%s",
+			"Config: symbols=%s tf=%s candles=%d indicators=%s",
 			app_cfg.symbols,
 			app_cfg.time_frame,
 			app_cfg.num_candles,
 			app_cfg.indicators,
-			args.hidden,
 		)
 
 	try:
 		if args.once:
 			for symbol in app_cfg.symbols:
-				_run_once(symbol, app_cfg.time_frame, app_cfg.num_candles, detectors, channels)
+				_run_once(symbol, app_cfg.time_frame, app_cfg.num_candles, detectors)
 		else:
-			_run_streaming(app_cfg, detectors, channels)
+			_run_streaming(app_cfg, detectors)
 	except KeyboardInterrupt:
 		logging.info("Interrupted by user.")
 	except Exception:

@@ -11,7 +11,6 @@ from typing import List, Tuple
 
 # Mapping from MEXC contract intervals -> seconds per candle.
 INTERVAL_SECONDS: dict[str, int] = {
-	"Min1": 60,
 	"Min5": 5 * 60,
 	# MEXC has no native 10m futures kline; data_fetcher builds these from paired Min5 bars.
 	"Min10": 10 * 60,
@@ -19,10 +18,7 @@ INTERVAL_SECONDS: dict[str, int] = {
 	"Min30": 30 * 60,
 	"Min60": 60 * 60,
 	"Hour4": 4 * 60 * 60,
-	"Hour8": 8 * 60 * 60,
-	"Day1": 24 * 60 * 60,
-	"Week1": 7 * 24 * 60 * 60,
-	"Month1": 30 * 24 * 60 * 60,
+
 }
 
 
@@ -46,11 +42,6 @@ class DivergenceConfig:
 	# RSI parameters.
 	rsi_period: int = 14
 
-	# MACD parameters (only used when MACD divergence is enabled).
-	macd_fast: int = 12
-	macd_slow: int = 26
-	macd_signal: int = 9
-
 	# Pivot detection — `right` controls confirmation lag (bars after the
 	# pivot needed to confirm it). Larger = fewer false pivots, more lag.
 	pivot_left: int = 3
@@ -67,10 +58,6 @@ class DivergenceConfig:
 	# Confirmation thresholds. Set to None to disable.
 	rsi_overbought: float | None = 60.0  # bearish needs at least one pivot >= this
 	rsi_oversold: float | None = 40.0  # bullish needs at least one pivot <= this
-
-	# Which divergence types to surface.
-	enable_regular: bool = True
-	enable_hidden: bool = False
 
 	# How many recent confirmed pivots to scan when looking for divergences.
 	# Comparing only the most recent pair tends to be the most actionable, but
@@ -112,7 +99,7 @@ class AppConfig:
 	symbols: List[str] = field(default_factory=lambda: ["TAO_USDT"])
 	time_frame: str = "Min10"
 	num_candles: int = 100
-	indicators: Tuple[str, ...] = ("RSI",)  # ("RSI",) or ("RSI", "MACD")
+	indicators: Tuple[str, ...] = ("RSI",)
 	divergence: DivergenceConfig = field(default_factory=DivergenceConfig)
 	streaming: StreamingConfig | None = None
 	log_level: str = "INFO"

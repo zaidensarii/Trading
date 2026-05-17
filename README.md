@@ -1,6 +1,6 @@
 # Trading — MEXC divergence scanner
 
-Python tool that polls **MEXC futures** OHLC data, computes **RSI** and/or **MACD**, and emits **regular and optional hidden** divergence signals with terminal alerts. Intended as a modular base you can extend with Slack, Telegram, webhooks, or websocket feeds.
+Python tool that polls **MEXC futures** OHLC data, computes **RSI**, and emits **bullish and bearish** divergence signals with terminal alerts. Intended as a modular base you can extend with Slack, Telegram, webhooks, or websocket feeds.
 
 > **Disclaimer:** This project is educational software only. Divergence signals are heuristics, not financial advice. You are solely responsible for any trading decisions.
 
@@ -9,8 +9,8 @@ Python tool that polls **MEXC futures** OHLC data, computes **RSI** and/or **MAC
 ## Highlights
 
 - **Streaming-aware polling** — aligned to candle close, backoff on errors, and a hard cap on consecutive failures.
-- **RSI + MACD divergence engine** — pluggable `IndicatorProvider` interface for adding indicators.
-- **Regular & hidden** bullish/bearish divergences — confirmation thresholds (RSI zones), pivot-distance filters, magnitude noise floors, and a soft confidence score.
+- **RSI divergence engine** — pluggable `IndicatorProvider` interface for adding indicators.
+- **Bullish & bearish** divergences — confirmation thresholds (RSI zones), pivot-distance filters, magnitude noise floors, and a soft confidence score.
 - **Non-repainting pivots** — confirmation lag built into pivot detection.
 - **TA-Lib when installed** — vectorized NumPy fallback if TA-Lib is missing.
 - **Pluggable alerts** — `TerminalAlertChannel` included; subclass `AlertChannel` for other destinations.
@@ -27,7 +27,7 @@ Python tool that polls **MEXC futures** OHLC data, computes **RSI** and/or **MAC
 model/
 ├── data_fetcher.py    # MEXC futures OHLC
 ├── config.py          # AppConfig, DivergenceConfig, StreamingConfig, intervals
-├── indicators/       # IndicatorProvider, RSI, MACD
+├── indicators/       # IndicatorProvider, RSI
 ├── divergence/       # Pivots, types, DivergenceDetector
 ├── alerts/           # AlertChannel, terminal channel
 └── streaming/        # CandlePoller (close-aligned)
@@ -64,9 +64,9 @@ If TA-Lib is not installed, indicators use pure NumPy implementations.
 # Real-time streaming: default BTC_USDT, Min10, RSI, 100 candles
 python app.py
 
-# Multiple symbols; RSI + MACD; include hidden divergences
+# Multiple symbols; RSI only
 python app.py --symbols BTC_USDT,ETH_USDT --time-frame Min5 \
-  --indicators RSI,MACD --hidden
+  --indicators RSI
 
 # Single scan (no loop) — handy for cron or CI
 python app.py --once
@@ -83,8 +83,7 @@ python app.py --log-level DEBUG
 | `--symbols` | Comma-separated list; overrides `--symbol`. |
 | `--time-frame` | Candle interval (`Min1`, `Min5`, `Min10`, `Min15`, …). Default: `Min10`. **Note:** `Min10` is synthesized from `Min5` where MEXC has no native 10m futures kline. |
 | `--num-candles` | Bars to fetch per poll. Default: `100`. |
-| `--indicators` | Comma-separated: `RSI`, `MACD`. Default: `RSI`. |
-| `--hidden` | Also detect hidden (continuation-style) divergences. |
+| `--indicators` | Comma-separated: `RSI`. Default: `RSI`. |
 | `--once` | Run one fetch + detect cycle per symbol, then exit. |
 | `--log-level` | Logging level (e.g. `INFO`, `DEBUG`). |
 
@@ -108,7 +107,6 @@ All detector and streaming knobs are in [`model/config.py`](model/config.py): `D
 | `min_price_diff_pct` | Noise floor on the price leg. |
 | `min_indicator_diff` | Noise floor on the indicator leg (e.g. RSI points). |
 | `rsi_overbought` / `rsi_oversold` | Optional exhaustion zones for bearish/bullish RSI confirmation. |
-| `enable_hidden` | Surface hidden divergences (CLI `--hidden` sets this at runtime). |
 
 ## Extending
 
